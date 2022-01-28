@@ -1180,9 +1180,6 @@ torch.autograd.set_detect_anomaly(True)
 #tc = TrainClassifier("config/cifar100_wrn/config_diffmultilam_cifar_100.py")
 #tc = TrainClassifier("config/cifar100_wrn/config_no_curr_res_cifar100.py")
 
-#tc = TrainClassifier("config/flowers/config_no_curr_flowers.py")
-#tc = TrainClassifier("config/flowers/config_multilam_flowers.py")
-
 #tc = TrainClassifier("config/cifar10_wrn/config_no_curr_cifar_10.py")
 #tc = TrainClassifier("config/cifar10_wrn/config_learnlam_cifar_10.py")
 #tc = TrainClassifier("config/cifar10_wrn/config_multilam_cifar_10.py")
@@ -1195,63 +1192,4 @@ tc = TrainClassifier("config/synthetic/config_learnlam_syn_gmm.py")
 #tc = TrainClassifier("config/cars_wrn/config_no_curr_cars.py")
 #tc = TrainClassifier("config/cars_wrn/config_multilam_cars.py")
 
-#tc = TrainClassifier("config/dogs_wrn/config_no_curr_airplane.py")
-#tc = TrainClassifier("config/dogs_wrn/config_multilam_airplane.py")
-#tc = TrainClassifier("config/dogs_wrn/config_multilam_cub.py")
-#tc = TrainClassifier("config/dogs_wrn/config_multilam_dogs.py")
-
-#tc = TrainClassifier("config/dogs_wrn/config_no_curr_dogs.py")
-#tc = TrainClassifier("config/dogs_wrn/config_no_curr_airplane.py")
-#tc = TrainClassifier("config/dogs_wrn/config_no_curr_cub.py")
-
 tc.train()
-
-"""            elif self.configdata['ds_strategy']['type'] in ['LearnLam']:
-
-                for batch_idx, (inputs, targets,indices) in enumerate(trainloader_ind):
-                    
-                    inputs, targets = inputs.to(self.configdata['train_args']['device']), targets.to(
-                        self.configdata['train_args']['device'],non_blocking=True)  # targets can have non_blocking=True.
-                    lam_optimizer.zero_grad()
-                    outputs = train_model(inputs)
-                    teacher_outputs = teacher_model(inputs)
-                    loss_SL = criterion_nored(outputs, targets)
-
-                    loss_KD = nn.KLDivLoss(reduction='none')(F.log_softmax(outputs / Temp, dim=1), \
-                                                                F.softmax(teacher_outputs / Temp, dim=1))
-                    loss_KD = torch.sum(loss_KD, dim=1)
-
-                    loss = torch.mean((1 - lambdas[indices]) * loss_SL + lambdas[indices] * Temp * Temp * loss_KD)
-
-                    loss.backward(retain_graph=True)
-                    subtrn_loss += loss.item()
-                    optimizer.step()
-
-                    optimizer.zero_grad()
-                    iterator = iter(valloader)
-                    data, label = next(iterator)
-
-                    data, label = data.to(self.configdata['train_args']['device']), label.to(
-                        self.configdata['train_args']['device'],non_blocking=True)  # targets can have non_blocking=True.
-                    outputs = train_model(data)
-                    val_loss = criterion(outputs, label)
-                    val_loss.backward()
-                    print(lambdas[indices[0]].grad)
-                    lam_optimizer.step()
-
-                    del inputs, targets
-
-                print("Training with lr", round(optimizer.param_groups[0]['lr'], 5))
-                if self.configdata['scheduler']['type'] == 'cyclic_cosine':
-                    scheduler.adjust_cosine_learning_rate_step(i + 1)
-                elif self.configdata['scheduler']['type'] == 'RPlateau':
-                    if valid and len(val_losses) > 0:
-                        scheduler.step(val_losses[-1])
-                    elif len(trn_losses) > 0:
-                        scheduler.step(trn_losses[-1])
-                else:
-                    scheduler.step()
-                    lam_scheduler.step()
-
-                train_time = time.time() - start_time"""
-
