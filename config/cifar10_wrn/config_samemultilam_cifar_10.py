@@ -1,25 +1,32 @@
-# LearninNet110', setting
+# Learning setting
 config = dict(setting="supervisedlearning",
 
-              dataset=dict(name="cars",
+              dataset=dict(name="cifar10",
                            datadir="../data",
                            feature="dss",
-                           type="pre-defined"),
+                           type="pre-defined",
+                           grad_fit=3),
 
               dataloader=dict(shuffle=True,
-                              trn_batch_size=32,
-                              val_batch_size=32,
-                              tst_batch_size=32,
+                              trn_batch_size=128,
+                              val_batch_size=1000,
+                              tst_batch_size=1000,
                               pin_memory=True),
 
-              model=dict(architecture='ResNet50', 
-                         numclasses=196,
-                         teacher_arch=['WRN_16_X'], 
-                         teacher_path=['results/No-curr_distil/cars/WRN_16_X_16_6_p0/16/model.pt']),
-              
+             model=dict(architecture='WRN_16_X', 
+                         numclasses=10,
+                         teacher_arch=['WRN_16_X','WRN_16_X','WRN_16_X','WRN_16_X'], 
+                         depth_teach = [16,16,16,16],
+                         width_teach = [8,8,8,8],
+                         depth = 16,
+                         width = 1,
+                         teacher_path=['results/No-curr_distil/cifar10/WRN_16_X_16_8_p0/16/model_20.pt',\
+                         'results/No-curr_distil/cifar10/WRN_16_X_16_8_p0/16/model_70.pt',\
+                         'results/No-curr_distil/cifar10/WRN_16_X_16_8_p0/16/model_130.pt',\
+                         'results/No-curr_distil/cifar10/WRN_16_X_16_8_p0/16/model.pt',]),
+
               ckpt=dict(is_load=False,
                         is_save=True,
-                        is_save_pic=False,
                         dir='results/',
                         save_every=10),
 
@@ -34,19 +41,18 @@ config = dict(setting="supervisedlearning",
               scheduler=dict(type="Mstep",
                              T_max=200),
 
-              ds_strategy=dict(type="No-curr",
+              ds_strategy=dict(type="MultiLam",
                                warm_epoch=10,
+                               select_every=10,
                                decay=0.2,
                                schedule=[0, 10, 20, 40, 60, 100, 140, 170, 201],
                                sch_ind=1),
 
               train_args=dict(num_epochs=200,
                               device="cuda",
-                              print_every=5,
+                              print_every=2,
                               results_dir='results/',
                               print_args=["val_loss", "val_acc", "tst_loss", "tst_acc", "time", "trn_loss", "trn_acc"],
                               return_args=[]
                               )
               )
-
-

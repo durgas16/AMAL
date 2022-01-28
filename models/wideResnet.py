@@ -104,7 +104,7 @@ class WideResNet(nn.Module):
         self.batch_norm = nn.BatchNorm2d(filters[-1])
         self.activation = nn.ReLU(inplace=True)
         if if_large:
-            self.avg_pool = nn.AvgPool2d(kernel_size=8*3)
+            self.avg_pool = nn.AvgPool2d(kernel_size=8*7)
         else:
             self.avg_pool = nn.AvgPool2d(kernel_size=8)
         self.fc = nn.Linear(filters[-1], n_classes)

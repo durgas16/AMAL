@@ -11,19 +11,19 @@ import pandas as pd
 from torch.distributions import Categorical
 import torch.nn.functional as F
 
-targets = np.load('results/No-curr_distil/cifar100/WRN_16_X_16_1_p0/16/targets.npy')
+targets = np.load('../results/No-curr_distil/dogs/WRN_16_X_16_8_p0/16/targets.npy')
 #np.load('results/No-curr_distil/cifar10/WRN_16_X_16_1_p0/16/targets.npy')
 
-tdir = 'results/No-curr_distil/cifar100/'
+tdir = '../results/No-curr_distil/dogs/'
 
-tmodel = ['WRN_16_X_16_3_p0/16']#, 'WRN_16_X_16_4_p0/16','WRN_16_X_16_3_p0/16','WRN_16_X_16_4_p0/16']
+tmodel = ['WRN_16_X_16_8_p0/16']#, 'WRN_16_X_16_4_p0/16','WRN_16_X_16_3_p0/16','WRN_16_X_16_4_p0/16']
 
-sdir = 'results/MultiLam_distilT/cifar100/'
+sdir = '../results/MultiLam_distilT/dogs/'
 
 #smodel = ['WRN_16_X_[16]_[3]_16_1_p1.0/24', 'WRN_16_X_[16]_[4]_16_1_p9.0/24','WRN_16_X_[16]_[6]_16_1_p9.0/24',\
 #'WRN_16_X_[16]_[8]_16_1_p9.0/24']
 
-smodel = ['WRN_16_X_[16, 16, 16, 16, 16]_[3, 3, 3, 3, 3]_16_1_p1.0/24']
+smodel = ['WRN_16_X_[16]_[8]_16_8_p1.0/16']
 
 #smodel = ['WRN_16_X_[16, 16, 16, 16, 16]_[3, 3, 3, 3, 3]_16_1_p1.0/24', \
 #'WRN_16_X_[16, 16, 16, 16, 16]_[4, 4, 4, 4, 4]_16_1_p1.0/24','WRN_16_X_[16, 16, 16, 16, 16]_[6, 6, 6, 6, 6]_16_1_p1.0/24',\

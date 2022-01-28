@@ -26,10 +26,10 @@ class Aircraft(VisionDataset):
     splits = ('train', 'val', 'trainval', 'test')
     img_folder = os.path.join('fgvc-aircraft-2013b', 'data', 'images')
 
-    def __init__(self, root, train=True, class_type='variant', transform=None,
+    def __init__(self, root, split='trainval', class_type='variant', transform=None,
                  target_transform=None, download=False):
         super(Aircraft, self).__init__(root, transform=transform, target_transform=target_transform)
-        split = 'trainval' if train else 'test'
+        #split = 'trainval' if train else 'test'
         if split not in self.splits:
             raise ValueError('Split "{}" not found. Valid splits are: {}'.format(
                 split, ', '.join(self.splits),

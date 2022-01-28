@@ -86,7 +86,7 @@ class LearnMultiLambdaMeta(object):
         #self.smoothLoss.smoothing = 0.4 
         lambdas = lam.cuda(0)#, device=self.device)
         #soft_lam = F.softmax(lambdas, dim=1)
-        smoothing = 0.
+        smoothing = 0.2
         '''with torch.no_grad():
             for batch_idx, (inputs, targets) in enumerate(self.valloader):
                 inputs, targets = inputs.to(self.device), targets.to(self.device, non_blocking=True)
@@ -267,12 +267,8 @@ class LearnMultiLambdaMeta(object):
                     up_grads = torch.cat((l0_grads, l1_grads), dim=1).sum(0)
 
                     
-                    #combined = (0.9*up_grads_val+0.1*up_grads).T
-                    #if eta > 0.02:
-                    #    combined = (0.1*up_grads_val+0.9*up_grads).T
-                    #else:
                     combined = (0.9*up_grads_val+0.1*up_grads).T
-                    #combined = (up_grads).T
+
 
                     """tea_val = torch.max(F.log_softmax(tea_out_val/c_temp, dim=1),dim=1).values
                     stu_val = F.log_softmax(out_vec_val/c_temp, dim=1)[torch.arange(out_vec_val.shape[0]),self.y_val]

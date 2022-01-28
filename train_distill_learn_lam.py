@@ -29,10 +29,10 @@ from utils.scheduler import Scheduler
 from models import *
 from models.resnet_cifar import resnet8_cifar, resnet20_cifar, resnet110_cifar
 
-from diffcultymeasure_val_class_distil.Lambda import RewLambda
-from diffcultymeasure_val_class_distil.LearnLambdaMeta import LearnLambdaMeta
+from getLambda.Lambda import RewLambda
+from getLambda.LearnLambdaMeta import LearnLambdaMeta
 
-seed = 16  # [42,36,24,16,50]
+seed = 36 #  # [42,36,24,16,50]
 
 # os.environ["CUBLAS_WORKSPACE_CONFIG"]=":4096:8"
 torch.manual_seed(seed)
@@ -116,17 +116,21 @@ class TrainClassifier:
             model = ResNet50(self.configdata['model']['numclasses'])
         elif mtype == 'ResNet8':
             model = resnet8_cifar(num_classes=self.configdata['model']['numclasses'])
-        elif mtype == 'ResNet20':
-            model = resnet20_cifar(num_classes=self.configdata['model']['numclasses'])
-        elif mtype == 'ResNet110':
-            model = resnet110_cifar(num_classes=self.configdata['model']['numclasses'])
+        elif mtype == 'ResNet14':
+            model = resnet14_cifar(num_classes=self.configdata['model']['numclasses'])
+        elif mtype == 'ResNet56':
+            model = resnet56_cifar(num_classes=self.configdata['model']['numclasses'])
+        elif mtype == 'ResNet26':
+            model = resnet26_cifar(num_classes=self.configdata['model']['numclasses'])
+        elif mtype == 'ResNet32':
+            model = resnet32_cifar(num_classes=self.configdata['model']['numclasses'])
         elif mtype == 'WideResNet':
             model = wrn(input_shape=self.configdata['model']['input_shape'], \
                         num_classes=self.configdata['model']['numclasses'], \
                         depth=28, widen_factor=10, repeat=3, dropRate=0.3, bias=True)
 
         elif mtype == 'WRN_16_X':
-            if self.configdata['dataset']['name'] in ['cars','flowers']:
+            if self.configdata['dataset']['name'] in ['cars','flowers','airplane','dogs','Cub2011']:
                 model = WRN_16_X(depth=d, width =w,num_classes=self.configdata['model']['numclasses'],\
                 input_features=n_channels,if_large=True)
             else:
@@ -235,7 +239,7 @@ class TrainClassifier:
                                                                                'classimb_ratio'], valid=valid)
             else:
                 if self.configdata['dataset']['name'] == "synthetic":
-                    trainset, validset, testset, num_cls = load_dataset_custom(self.configdata['dataset']['datadir'],
+                    trainset,noise_lb, validset, testset, num_cls = load_dataset_custom(self.configdata['dataset']['datadir'],
                                                                                self.configdata['dataset']['name'],
                                                                                self.configdata['dataset']['feature'],
                                                                                seed=42,
@@ -245,6 +249,8 @@ class TrainClassifier:
                                                                                    'test_type'], \
                                                                                ncls=self.configdata['model'][
                                                                                    'numclasses'])  # noise_ratio=0.5) #24
+
+                    n_channels = 3
                 elif self.configdata['dataset']['name'] in ["dermamnist","retinamnist","breastmnist","tissuemnist",\
                 "organsmnist","octmnist","pneumoniamnist"]:
                     trainset, validset, testset, num_cls,n_channels = load_dataset_custom(self.configdata['dataset']['datadir'],
@@ -274,7 +280,7 @@ class TrainClassifier:
                                                                      'classimb_ratio'], valid=valid)
             else:
                 if self.configdata['dataset']['name'] == "synthetic":
-                    trainset, testset, num_cls = load_dataset_custom(self.configdata['dataset']['datadir'],
+                    trainset,noise_lb, testset, num_cls = load_dataset_custom(self.configdata['dataset']['datadir'],
                                                                      self.configdata['dataset']['name'],
                                                                      self.configdata['dataset']['feature'], seed=42,
                                                                      valid=valid,
@@ -424,12 +430,12 @@ class TrainClassifier:
 
         torch.manual_seed(seed)
         # Model Creation
-        train_model = torch.nn.DataParallel(self.create_model(n_channels=n_channels), device_ids=[0, 1])
+        train_model = self.create_model(n_channels=n_channels)
         print("Student",sum(p.numel() for p in train_model.parameters() if p.requires_grad))
         #ema_model = torch.nn.DataParallel(self.create_model(), device_ids=[0, 1])
         
         if _lambda > 0:
-            teacher_model = torch.nn.DataParallel(self.create_model(if_teacher=True,n_channels=n_channels), device_ids=[0, 1])
+            teacher_model = self.create_model(if_teacher=True,n_channels=n_channels)
             print("Teacher",sum(p.numel() for p in teacher_model.parameters() if p.requires_grad))
             checkpoint = torch.load(self.configdata['model']['teacher_path'])
             teacher_model.load_state_dict(checkpoint['state_dict'])
@@ -1135,8 +1141,9 @@ class TrainClassifier:
 torch.autograd.set_detect_anomaly(True)
 
 #tc = TrainClassifier("config/cifar100_wrn/config_no_curr_cifar100.py")
+#tc = TrainClassifier("config/cifar100_wrn/config_no_curr_res_cifar100.py")
 
-tc = TrainClassifier("config/flowers/config_no_curr_flowers.py")
+#tc = TrainClassifier("config/flowers/config_no_curr_flowers.py")
 
 #tc = TrainClassifier("config/cifar10/config_relam_cifar_10.py")
 
@@ -1144,9 +1151,12 @@ tc = TrainClassifier("config/flowers/config_no_curr_flowers.py")
 #tc = TrainClassifier("config/cifar10_wrn/config_learnlam_cifar_10.py")
 
 #tc = TrainClassifier("config/synthetic/config_learnlam_syn_gmm.py")
-#tc = TrainClassifier("config/synthetic/config_no_curr_syn_gmm.py")
+tc = TrainClassifier("config/synthetic/config_no_curr_syn_gmm.py")
 
-#tc = TrainClassifier("config/cars_wrn/config_no_curr_cars_res50.py")
+#tc = TrainClassifier("config/cars_wrn/config_no_curr_cars.py")
+#tc = TrainClassifier("config/dogs_wrn/config_no_curr_dogs.py")
+#tc = TrainClassifier("config/dogs_wrn/config_no_curr_cub.py")
+#tc = TrainClassifier("config/dogs_wrn/config_no_curr_airplane.py")
 tc.train()
 
 """            elif self.configdata['ds_strategy']['type'] in ['LearnLam']:

@@ -5,7 +5,7 @@ config = dict(setting="supervisedlearning",
                            datadir="../data",
                            feature="dss",
                            type="pre-defined",
-                           grad_fit=5),
+                           grad_fit=3),
 
               dataloader=dict(shuffle=True,
                               trn_batch_size=128,
@@ -13,12 +13,17 @@ config = dict(setting="supervisedlearning",
                               tst_batch_size=1000,
                               pin_memory=True),
 
-              model=dict(architecture='ResNet18',
-                         type='pre-defined',
+             model=dict(architecture='DenseNet_X',#'WRN_16_X', 
                          numclasses=100,
-                         teacher_arch='WideResNet', #'ResNet18',
-                         input_shape=(1, 3, 32, 32),
-                         teacher_path='results/No-curr_distil/cifar100/WideResNet_p0/model.pt'),
+                         teacher_arch=['WRN_16_X','WRN_16_X','WRN_16_X','WRN_16_X'], 
+                         depth_teach = [16,16,16,16],
+                         width_teach = [8,8,8,8], #[3,3,3,3]
+                         depth = 40,#16,
+                         width = 12,#1
+                         teacher_path=['results/No-curr_distil/cifar100/WRN_16_X_16_8_p0/16/model_20.pt',\
+                         'results/No-curr_distil/cifar100/WRN_16_X_16_8_p0/16/model_70.pt',\
+                         'results/No-curr_distil/cifar100/WRN_16_X_16_8_p0/16/model_130.pt',\
+                         'results/No-curr_distil/cifar100/WRN_16_X_16_8_p0/16/model.pt']),
 
               ckpt=dict(is_load=False,
                         is_save=True,
@@ -33,17 +38,17 @@ config = dict(setting="supervisedlearning",
                              lr=0.1,
                              weight_decay=5e-4),
 
-              scheduler=dict(type="cosine_annealing",
-                             T_max=250),
+              scheduler=dict(type="Mstep",
+                             T_max=200),
 
-              ds_strategy=dict(type="RewLam",
+              ds_strategy=dict(type="MultiLam",
                                warm_epoch=10,
                                select_every=10,
                                decay=0.2,
-                               schedule=[0, 10, 20, 40, 60, 100, 140, 170, 200, 251],
+                               schedule=[0, 10, 20, 40, 60, 100, 140, 170, 201],
                                sch_ind=1),
 
-              train_args=dict(num_epochs=250,
+              train_args=dict(num_epochs=200,
                               device="cuda",
                               print_every=2,
                               results_dir='results/',
@@ -51,13 +56,3 @@ config = dict(setting="supervisedlearning",
                               return_args=[]
                               )
               )
-
-'''
-dss_strategy=dict(type="GradMatch",
-               fraction=0.1,
-               select_every=20,
-               lam=0.5,
-               valid=False),
-
-teacher_path = 'results/No-curr_class/cifar100/WideResNet_f/model.pt'''
-

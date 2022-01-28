@@ -1,3 +1,14 @@
+results
+utils/plots
+utils/classwise.py
+utils/entvslam.py
+utils/mena_std.py
+utils/timevslam.py
+utils/plot_lam_scatter.py
+utils/c_score_lam.py
+train_distil_learn_lam.py
+config/dogs_wrn
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

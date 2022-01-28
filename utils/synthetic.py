@@ -81,7 +81,7 @@ def get_synthetic(seed=42, classes=4, type="class", test_type="None", noise_rati
                              n_features=2,
                              centers=classes,
                              random_state=seed)  # cluster_std=a[ind[:classes]],'''
-        x, y = dt.make_blobs(n_samples=5000, centers=8, center_box=(- 20.0, 20.0),
+        x, y = dt.make_blobs(n_samples=10000, centers=8, center_box=(- 20.0, 20.0),
                                cluster_std=[1.4, 2.8, 1.7, 4, 2, 3.5, 1.5, 2.5], random_state=20)
 
         if test_type == "Noise":
@@ -119,7 +119,13 @@ def get_synthetic(seed=42, classes=4, type="class", test_type="None", noise_rati
     else:'''
 
     sh_x = torch.randperm(x.shape[0])
-    train = CustomDataset(torch.tensor(x[sh_x[:int(len(x) * 0.9)]]), torch.tensor(y[sh_x[:int(len(y) * 0.9)]]), transform=transform)
+    
+    train_ind = sh_x[:int(len(x) * 0.9)]
+    '''noise_size=int(len(train_ind)*0.2)
+    noise_indices = np.random.choice(train_ind, size=noise_size, replace=False)
+    y[noise_indices] = torch.tensor(np.random.choice(np.arange(classes), size=noise_size, replace=True))'''
+
+    train = CustomDataset(torch.tensor(x[train_ind]), torch.tensor(y[train_ind]), transform=transform)
     test = CustomDataset(torch.tensor(x[sh_x[int(len(x) * 0.9):]]), torch.tensor(y[sh_x[int(len(y) * 0.9):]]),transform=transform)
 
     return train, test, classes

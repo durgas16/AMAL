@@ -9,16 +9,19 @@ from torch.utils.data import Dataset, random_split
 from torchvision import transforms
 from PIL import Image, ImageEnhance, ImageOps
 
-from wilds.common.data_loaders import get_train_loader
-from wilds import get_dataset
+#from wilds.common.data_loaders import get_train_loader
+#from wilds import get_dataset
 
 import random
 
 from .cars import Cars
+from .airplane import Aircraft
 from .synthetic import get_synthetic
+from .dogs import dogs
+from .cub import Cub2011
 
-import medmnist
-from medmnist import INFO, Evaluator
+#import medmnist
+#from medmnist import INFO, Evaluator
 
 
 class TransformTwice:
@@ -132,15 +135,26 @@ def load_dataset_custom(datadir, dset_name, feature, valid=True, isnumpy=False, 
             num_trn = num_fulltrn - num_val
             trainset, valset = random_split(fullset, [num_trn, num_val])
 
+
             if feature == 'noise':
                 print((trainset.dataset[trainset.indices])[1][:20])
                 fullset.targets[trainset.indices] = create_noisy((trainset.dataset[trainset.indices])[1], \
                                                                  num_cls, noise_ratio=kwargs['noise_ratio'])
                 print((trainset.dataset[trainset.indices])[1][:20])
-            return trainset, valset, testset, num_cls
+
+            print(num_fulltrn,max(trainset.indices))
+            noise_size=int(len(trainset.indices)*0.1)
+            noise_indices = np.random.choice(np.arange(len(trainset.indices)), size=noise_size, replace=False)
+            fullset.targets[np.array(trainset.indices)[noise_indices]] = torch.tensor(np.random.choice(np.arange(num_cls), \
+            size=noise_size, replace=True))
+
+            #fullset.data[np.array(trainset.indices)[noise_indices]] = fullset.data[np.array(trainset.indices)[noise_indices]] + \
+            #np.random.normal(0.0, 1.0, (noise_size, 2)).astype('float32')
+            
+            return trainset, noise_indices,  valset, testset, num_cls
         else:
 
-            return fullset, testset, num_cls
+            return fullset, noise_indices,  testset, num_cls
 
 
     elif dset_name == "mnist":
@@ -691,7 +705,7 @@ def load_dataset_custom(datadir, dset_name, feature, valid=True, isnumpy=False, 
         ])'''
         # RandomBrightness(-0.25, 0.25),
 
-        crop_size = 96
+        crop_size = 224 #96
         transform_train = transforms.Compose([transforms.Resize(crop_size),transforms.RandomCrop(crop_size),\
         transforms.RandomRotation(45),transforms.RandomHorizontalFlip(),transforms.ToTensor(),\
         torchvision.transforms.Normalize([0.485, 0.456, 0.406],[0.229, 0.224, 0.225])])
@@ -731,6 +745,114 @@ def load_dataset_custom(datadir, dset_name, feature, valid=True, isnumpy=False, 
                 return fullset, fullset2, testset, num_cls
             else:
                 return fullset, testset, num_cls
+
+    elif dset_name == 'Cub2011':
+
+        crop_size = 224 #96
+        transform_train = transforms.Compose([transforms.Resize(crop_size),transforms.RandomCrop(crop_size),\
+        transforms.RandomRotation(45),transforms.RandomHorizontalFlip(),transforms.ToTensor(),\
+        torchvision.transforms.Normalize([0.485, 0.456, 0.406],[0.229, 0.224, 0.225])])
+
+        transform_test = transforms.Compose([transforms.Resize(crop_size),transforms.RandomCrop(crop_size),\
+        transforms.ToTensor(),torchvision.transforms.Normalize([0.485, 0.456, 0.406],[0.229, 0.224, 0.225])])
+
+        num_cls = 200
+
+        fullset = Cub2011(root=datadir, train=True, download=True, transform=transform_train)
+        testset = Cub2011(root=datadir, train=False, download=True, transform=transform_test)
+
+        if valid:
+            validation_set_fraction = 0.1
+
+            targets = fullset.data.iloc[:].target.to_numpy()
+            for i in range(num_cls):
+                class_ind = torch.where(torch.Tensor(targets) == i)[0]
+                split = int(len(class_ind) * validation_set_fraction + 0.5)
+                shuffle = torch.randperm(len(class_ind))
+                if i == 0:
+                    train_ind = class_ind[shuffle[split:]].tolist()
+                    val_ind = class_ind[shuffle[:split]].tolist()
+                else:
+                    train_ind.extend(class_ind[shuffle[split:]].tolist())
+                    val_ind.extend(class_ind[shuffle[:split]].tolist())
+
+            trainset = torch.utils.data.Subset(fullset, train_ind)
+            valset = torch.utils.data.Subset(fullset, val_ind)
+            
+            return trainset, valset, testset, num_cls
+        else:
+            return fullset, testset, num_cls
+
+    elif dset_name == 'dogs':
+
+        crop_size = 224 #96
+        transform_train = transforms.Compose([transforms.Resize(crop_size),transforms.RandomCrop(crop_size),\
+        transforms.RandomRotation(45),transforms.RandomHorizontalFlip(),transforms.ToTensor(),\
+        torchvision.transforms.Normalize([0.485, 0.456, 0.406],[0.229, 0.224, 0.225])])
+
+        transform_test = transforms.Compose([transforms.Resize(crop_size),transforms.RandomCrop(crop_size),\
+        transforms.ToTensor(),torchvision.transforms.Normalize([0.485, 0.456, 0.406],[0.229, 0.224, 0.225])])
+
+        num_cls = 120
+
+        fullset = dogs(root=datadir, train=True, download=True, transform=transform_train)
+        testset = dogs(root=datadir, train=False, download=True, transform=transform_test)
+
+        if valid:
+            validation_set_fraction = 0.1
+            num_fulltrn = len(fullset)
+            num_val = int(num_fulltrn * validation_set_fraction)
+            num_trn = num_fulltrn - num_val
+            trainset, valset = random_split(fullset, [num_trn, num_val])
+            
+            return trainset, valset, testset, num_cls
+        else:
+            return fullset, testset, num_cls
+
+
+    elif dset_name == 'airplane':
+
+        '''jitter_params = 0.4
+        transform_train = transforms.Compose([
+            transforms.RandomResizedCrop(224, scale=(0.4, 1.0)),
+            transforms.RandomHorizontalFlip(),
+            transforms.ColorJitter(brightness=jitter_params, contrast=jitter_params, saturation=jitter_params, hue=0),
+            ImageNetPolicy(),
+            cutout(24, 1.0, False),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
+        ])'''
+        # RandomBrightness(-0.25, 0.25),
+
+        crop_size = 224 #96
+        transform_train = transforms.Compose([transforms.Resize(crop_size),transforms.RandomCrop(crop_size),\
+        transforms.RandomRotation(45),transforms.RandomHorizontalFlip(),transforms.ToTensor(),\
+        torchvision.transforms.Normalize([0.485, 0.456, 0.406],[0.229, 0.224, 0.225])])
+
+        '''transform_test = transforms.Compose([
+            transforms.Resize((224, 224)),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
+        ])'''
+
+        transform_test = transforms.Compose([transforms.Resize(crop_size),transforms.RandomCrop(crop_size),\
+        transforms.ToTensor(),torchvision.transforms.Normalize([0.485, 0.456, 0.406],[0.229, 0.224, 0.225])])
+
+        num_cls = 102
+
+        fullset = Aircraft(root=datadir, split='trainval', download=True, transform=transform_train)
+        testset = Aircraft(root=datadir, split='test', download=True, transform=transform_test)
+
+        if valid:
+            validation_set_fraction = 0.1
+            num_fulltrn = len(fullset)
+            num_val = int(num_fulltrn * validation_set_fraction)
+            num_trn = num_fulltrn - num_val
+            trainset, valset = random_split(fullset, [num_trn, num_val])
+            
+            return trainset, valset, testset, num_cls
+        else:
+            return fullset, testset, num_cls
 
     elif dset_name == 'flowers':
 

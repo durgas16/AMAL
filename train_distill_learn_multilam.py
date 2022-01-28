@@ -29,11 +29,11 @@ from utils.scheduler import Scheduler
 from models import *
 from models.resnet_cifar import resnet8_cifar, resnet20_cifar, resnet110_cifar
 
-from diffcultymeasure_val_class_distil.Lambda import RewLambda
-from diffcultymeasure_val_class_distil.LearnLambdaMeta import LearnLambdaMeta
-from diffcultymeasure_val_class_distil.LearnMultiLambdaMeta import LearnMultiLambdaMeta
+#from getLambda.Lambda import RewLambda
+#from getLambda.LearnLambdaMeta import LearnLambdaMeta
+from getLambda.LearnMultiLambdaMeta import LearnMultiLambdaMeta
 
-seed = 24  # [42,36,24,16,50]
+seed = 84 # [42,36,24,16,50]
 
 # os.environ["CUBLAS_WORKSPACE_CONFIG"]=":4096:8"
 torch.manual_seed(seed)
@@ -101,17 +101,21 @@ class TrainClassifier:
             model = ResNet50(self.configdata['model']['numclasses'])
         elif mtype == 'ResNet8':
             model = resnet8_cifar(num_classes=self.configdata['model']['numclasses'])
-        elif mtype == 'ResNet20':
-            model = resnet20_cifar(num_classes=self.configdata['model']['numclasses'])
-        elif mtype == 'ResNet110':
-            model = resnet110_cifar(num_classes=self.configdata['model']['numclasses'])
+        elif mtype == 'ResNet14':
+            model = resnet14_cifar(num_classes=self.configdata['model']['numclasses'])
+        elif mtype == 'ResNet56':
+            model = resnet56_cifar(num_classes=self.configdata['model']['numclasses'])
+        elif mtype == 'ResNet26':
+            model = resnet26_cifar(num_classes=self.configdata['model']['numclasses'])
+        elif mtype == 'ResNet32':
+            model = resnet32_cifar(num_classes=self.configdata['model']['numclasses'])
         elif mtype == 'WideResNet':
             model = wrn(input_shape=self.configdata['model']['input_shape'], \
                         num_classes=self.configdata['model']['numclasses'], \
                         depth=28, widen_factor=10, repeat=3, dropRate=0.3, bias=True)
 
         elif mtype == 'WRN_16_X':
-            if self.configdata['dataset']['name'] in ['cars','flowers']:
+            if self.configdata['dataset']['name'] in ['cars','flowers','airplane','dogs','Cub2011']:
                 model = WRN_16_X(depth=d, width =w,num_classes=self.configdata['model']['numclasses'],if_large=True)
             else:
                 model = WRN_16_X(depth=d, width =w,num_classes=self.configdata['model']['numclasses'],if_large=False)
@@ -158,8 +162,8 @@ class TrainClassifier:
             scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=self.configdata['scheduler'][
                 'T_max'])  # ,eta_min=8e-4
         elif self.configdata['scheduler']['type'] == 'step':
-            scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[40, 60, 80, 100],
-                                                             gamma=0.2)  # [60,120,160],
+            scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[40, 80],
+                                                             gamma=0.5)  # [60,120,160],
         elif self.configdata['scheduler']['type'] == 'Mstep':
             scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=\
             [int(elem*self.configdata['train_args']['num_epochs']) for elem in [0.3, 0.6, 0.8]], gamma=0.2)                                                     
@@ -223,7 +227,7 @@ class TrainClassifier:
                                                                                'classimb_ratio'], valid=valid)
             else:
                 if self.configdata['dataset']['name'] == "synthetic":
-                    trainset, validset, testset, num_cls = load_dataset_custom(self.configdata['dataset']['datadir'],
+                    trainset,noise_lb, validset, testset, num_cls = load_dataset_custom(self.configdata['dataset']['datadir'],
                                                                                self.configdata['dataset']['name'],
                                                                                self.configdata['dataset']['feature'],
                                                                                seed=42,
@@ -239,11 +243,11 @@ class TrainClassifier:
                                                                                self.configdata['dataset']['feature'],
                                                                                valid=valid)
 
-                    trainsetN, validsetN, _,_ = load_dataset_custom(self.configdata['dataset']['datadir'],
+                    '''trainsetN, validsetN, _,_ = load_dataset_custom(self.configdata['dataset']['datadir'],
                                                                                self.configdata['dataset']['name'],
                                                                                self.configdata['dataset']['feature'],
                                                                                valid=valid,transformN=True
-                                                                    )
+                                                                    )'''
 
         else:
             if self.configdata['dataset']['feature'] == 'classimb':
@@ -254,7 +258,7 @@ class TrainClassifier:
                                                                      'classimb_ratio'], valid=valid)
             else:
                 if self.configdata['dataset']['name'] == "synthetic":
-                    trainset, testset, num_cls = load_dataset_custom(self.configdata['dataset']['datadir'],
+                    trainset,noise_lb, testset, num_cls = load_dataset_custom(self.configdata['dataset']['datadir'],
                                                                      self.configdata['dataset']['name'],
                                                                      self.configdata['dataset']['feature'], seed=42,
                                                                      valid=valid,
@@ -285,15 +289,20 @@ class TrainClassifier:
         trainloader_ind = torch.utils.data.DataLoader(MyDataset(trainset), batch_size=trn_batch_size,
                                                   shuffle=True, pin_memory=True)
 
+        trainloader_ind_small = torch.utils.data.DataLoader(MyDataset(trainset), batch_size=trn_batch_size//4,
+                                                  shuffle=True, pin_memory=True)
+
         if valid:
             valloader = torch.utils.data.DataLoader(validset, batch_size=val_batch_size,
-                                                    shuffle=False, pin_memory=True)
+                                                    shuffle=True, pin_memory=True)
 
             for batch_idx, (inputs, targets) in enumerate(valloader):
                 if batch_idx == 0:
                     full_targets_val = targets
                 else:
                     full_targets_val = torch.cat((full_targets_val, targets), dim=0)
+
+            print(torch.unique(full_targets_val,return_counts=True))
 
         testloader = torch.utils.data.DataLoader(testset, batch_size=tst_batch_size,
                                                  shuffle=False, pin_memory=True)
@@ -303,6 +312,8 @@ class TrainClassifier:
                 full_targets_train = targets
             else:
                 full_targets_train = torch.cat((full_targets_train, targets), dim=0)
+
+        print(torch.unique(full_targets_train,return_counts=True))
 
         trn_losses = list()
         val_losses = list()  # np.zeros(configdata['train_args']['num_epochs'])
@@ -404,7 +415,7 @@ class TrainClassifier:
         elif mtype == 'WRN_16_X':
             d = self.configdata['model']['depth']
             w = self.configdata['model']['width']
-        train_model = torch.nn.DataParallel(self.create_model(mtype,hid_unit,d,w), device_ids=[0, 1])
+        train_model = self.create_model(mtype,hid_unit,d,w)
         print("Student",sum(p.numel() for p in train_model.parameters() if p.requires_grad))
         #ema_model = torch.nn.DataParallel(self.create_model(), device_ids=[0, 1])
         
@@ -426,12 +437,11 @@ class TrainClassifier:
             for m in range(len(mtype)):
 
                 if mtype[m] == 'NN_2L':
-                   teacher_model.append(torch.nn.DataParallel(self.create_model(mtype[m],hid_unit=hid_unit[m]),\
-                    device_ids=[0, 1]))
+                   teacher_model.append(self.create_model(mtype[m],hid_unit=hid_unit[m]))
                 elif mtype[m] == 'WRN_16_X':
-                    teacher_model.append(torch.nn.DataParallel(self.create_model(mtype[m],d=d[m],w=w[m]), device_ids=[0, 1]))
+                    teacher_model.append(self.create_model(mtype[m],d=d[m],w=w[m]))
                 else:
-                    teacher_model.append(torch.nn.DataParallel(self.create_model(mtype[m]), device_ids=[0, 1]))
+                    teacher_model.append(self.create_model(mtype[m]))
                 
                 print("Teacher",sum(p.numel() for p in teacher_model[-1].parameters() if p.requires_grad))
                 print("Loading from",self.configdata['model']['teacher_path'][m])
@@ -446,11 +456,8 @@ class TrainClassifier:
         optimizer, scheduler = self.optimizer_with_scheduler(train_model)
         
         if self.configdata['ds_strategy']['type'] in ['MultiLam']:
-            #lambdas = torch.full((N,),_lambda, device=self.configdata['train_args']['device'])
-            #lambdas = torch.rand(N, device=self.configdata['train_args']['device'])
-            #lambdas = torch.cat((1-lambdas.view(-1,1),lambdas.view(-1,1)),dim=1)
-            #lambdas = torch.rand((N,Nteacher+1), device=self.configdata['train_args']['device'])
-            lambdas = torch.full((N,Nteacher+1),0.5, device=self.configdata['train_args']['device'])
+            lambdas = torch.rand((N,Nteacher+1), device=self.configdata['train_args']['device'])
+            
             
             lambdas[:,0] = 1- torch.max(lambdas[:,1:],dim=1).values
             
@@ -464,7 +471,7 @@ class TrainClassifier:
             if self.configdata['ds_strategy']['type'] in ['MultiLam']:
                 start_epoch, train_model, optimizer, scheduler, ckpt_loss, load_metrics, all_lambda,all_outputs= self.load_ckp(
                     checkpoint_path_10, train_model, optimizer, scheduler) #ema_model,
-                lambdas = all_lambda[-1]
+                lambdas = copy.deepcopy(all_lambda[-1])
             else:
                 start_epoch, train_model, optimizer, scheduler, ckpt_loss, load_metrics, all_outputs= self.load_ckp(
                     checkpoint_path, train_model, optimizer, scheduler) 
@@ -513,7 +520,7 @@ class TrainClassifier:
                             teacher_model, criterion, Temp) #testloader'''
         
         if self.configdata['ds_strategy']['type'] in ['MultiLam']:
-            lelam = LearnMultiLambdaMeta(trainloader_ind, valloader, train_model, num_cls, N, criterion_nored, \
+            lelam = LearnMultiLambdaMeta(trainloader_ind_small, valloader, train_model, num_cls, N, criterion_nored, \
                                 self.configdata['train_args']['device'], self.configdata['dataset']['grad_fit'], \
                                 teacher_model, criterion, Temp)
             
@@ -565,6 +572,7 @@ class TrainClassifier:
                             for m in range(Nteacher):
                                 with torch.no_grad():
                                     teacher_outputs = teacher_model[m](inputs)
+                                #print(teacher_outputs )
                                 loss_KD = nn.KLDivLoss(reduction='batchmean')(
                                     F.log_softmax(outputs / Temp, dim=1), F.softmax(teacher_outputs / Temp, dim=1))
                                 loss += _lambda * Temp * Temp * loss_KD
@@ -608,7 +616,7 @@ class TrainClassifier:
                     train_model.load_state_dict(cached_state_dictT)
 
                     if self.configdata['ds_strategy']['type'] in ['MultiLam']:
-                        lambdas = lelam.get_lambdas(optimizer.param_groups[0]['lr'],lambdas)
+                        lambdas = lelam.get_lambdas(optimizer.param_groups[0]['lr'],i,lambdas)
                         #soft_lam = F.softmax(lambdas, dim=1)
                         for m in range(Nteacher+1):
                             #print(soft_lam[:,m].max(), soft_lam[:,m].min(), torch.median(soft_lam[:,m]),\
@@ -676,7 +684,8 @@ class TrainClassifier:
             train_model.eval()
 
             # if "trn_loss" in print_args:
-            diff_teach = torch.zeros(N).bool()
+            if _lambda > 0 and i<=1:
+                diff_teach = torch.zeros(N).bool()
             entropy_trn = torch.zeros(N)
             target_trn = torch.zeros(N).int()
             curr_outputs = torch.zeros(N,num_cls)
@@ -703,7 +712,7 @@ class TrainClassifier:
                     trn_correct += predicted.eq(targets).sum().item()
                 trn_losses.append(trn_loss)
                 trn_acc.append(trn_correct / trn_total)
-            
+                #print(diff_teach,trn_acc[-1])
             all_outputs.append(curr_outputs)
             
             '''if (i < self.configdata['ds_strategy']['warm_epoch']) or \
@@ -783,7 +792,7 @@ class TrainClassifier:
                 if (i < self.configdata['ds_strategy']['warm_epoch']):
                     all_lambda = []
                 
-                all_lambda.append(lambdas)
+                all_lambda.append(copy.deepcopy(lambdas))
 
             if ((i + 1) % self.configdata['train_args']['print_every'] == 0):
 
@@ -881,10 +890,17 @@ class TrainClassifier:
                         'loss': self.loss_function(),
                         'metrics': metric_dict,
                         'output': all_outputs
+                        
                     }
 
                     if self.configdata['ds_strategy']['type'] in ['MultiLam']:
+                        flambda = all_lambda[-1][:,1].cpu()
+
+                        print(flambda.max(), flambda.min(), torch.median(flambda), torch.quantile(flambda, 0.75),torch.quantile(flambda, 0.25))
                         ckpt_state['lambda']= all_lambda
+
+                    if self.configdata['dataset']['name'] == "synthetic":
+                        ckpt_state['noise_lb']= noise_lb
 
                     # save checkpoint
                     self.save_ckpt(ckpt_state, checkpoint_path)
@@ -902,12 +918,10 @@ class TrainClassifier:
                         if i+1 > 6:
                             y[idxs] = 10'''
 
-                        if  i + 1 <= 11:
+                        if  ((i + 1) / self.configdata['ckpt']['save_every'] == 1):
                             my_scatter_plot = plt.scatter((trainset.dataset[trainset.indices])[0][:, 0],
                                                           (trainset.dataset[trainset.indices])[0][:, 1],
                                                           c=(trainset.dataset[trainset.indices])[1],
-                                                          vmin=min((trainset.dataset[trainset.indices])[1]),
-                                                          vmax=max((trainset.dataset[trainset.indices])[1]),
                                                           s=10, cmap=cmap, norm=norm)
 
                             '''if i + 1 > 11 and self.configdata['ds_strategy']['type'] not in ['No-curr','RewLam']:
@@ -921,11 +935,10 @@ class TrainClassifier:
                             #plt.show()
                             plt.close()
 
+                            
                             my_scatter_plot = plt.scatter((trainset.dataset[trainset.indices])[0][~diff_teach][:, 0],
                                                           (trainset.dataset[trainset.indices])[0][~diff_teach][:, 1],
                                                           c=(trainset.dataset[trainset.indices])[1][~diff_teach],
-                                                          vmin=min((trainset.dataset[trainset.indices])[1][~diff_teach]),
-                                                          vmax=max((trainset.dataset[trainset.indices])[1][~diff_teach]),
                                                           s=10, cmap=cmap, norm=norm)
 
                             '''if i + 1 > 11 and self.configdata['ds_strategy']['type'] not in ['No-curr','RewLam']:
@@ -962,17 +975,18 @@ class TrainClassifier:
                             had, lab = scatter.legend_elements()
                             plt.legend(had,g_lam_list,loc='upper left',bbox_to_anchor=(1,0.5),title="Lambdas")"""
 
-                            curr_lam = all_lambda[-1]
+                            curr_lam = all_lambda[-1][:,1]
                             g_lam = torch.zeros_like(curr_lam)
-                            for qu in range(1, 10):
+                            for qu in range(0, 10,3):
                                 g_lam[curr_lam > qu / 10] = qu / 10
 
                             df = pd.DataFrame()
                             df["y"] = (trainset.dataset[trainset.indices])[1]
                             df["comp-1"] = (trainset.dataset[trainset.indices])[0][:, 0]
                             df["comp-2"] = (trainset.dataset[trainset.indices])[0][:, 1]
-                            df["g_lam"] = [str(round(qu, 2)) + "-" + str(round(qu + .1, 2)) for qu in g_lam.tolist()]
+                            df["g_lam"] = [str(round(qu, 2)) + "-" + str(round(qu + .3, 2)) for qu in g_lam.tolist()]
                             df.sort_values(by=['g_lam'])
+
 
                             sns.scatterplot(x="comp-1", y="comp-2", data=df, hue="g_lam", \
                                             palette=sns.color_palette("Paired", len(df["g_lam"].unique()))).set(
@@ -994,6 +1008,20 @@ class TrainClassifier:
                                 title="Lambdas @ " + str(i + 1) + " epoch for different lables")
                             plt.legend(loc='upper left', bbox_to_anchor=(1, 0.5),title="Lambdas")
                             plt.savefig(os.path.join(all_logs_dir, 'lam_diff' + str(i + 1) + '.png'),bbox_inches='tight')
+                            #plt.show()
+                            plt.close()
+
+                            dft = pd.DataFrame()
+                            dft["y"] = (trainset.dataset[trainset.indices])[1][noise_lb]
+                            dft["comp-1"] = (trainset.dataset[trainset.indices])[0][noise_lb][:, 0]
+                            dft["comp-2"] = (trainset.dataset[trainset.indices])[0][noise_lb][:, 1]
+                            dft["g_lam"] = [str(round(qu, 2)) + "-" + str(round(qu + .1, 2)) for qu in g_lam[noise_lb].tolist()]
+                            dft.sort_values(by=['g_lam'])
+                            sns.scatterplot(x="comp-1", y="comp-2", data=dft, hue="g_lam", \
+                                            palette=sns.color_palette("Paired", len(dft["g_lam"].unique()))).set(
+                                title="Lambdas @ " + str(i + 1) + " epoch for different lables")
+                            plt.legend(loc='upper left', bbox_to_anchor=(1, 0.5),title="Lambdas")
+                            plt.savefig(os.path.join(all_logs_dir, 'lam_noise' + str(i + 1) + '.png'),bbox_inches='tight')
                             #plt.show()
                             plt.close()
 
@@ -1148,7 +1176,9 @@ torch.autograd.set_detect_anomaly(True)
 
 #tc = TrainClassifier("config/cifar100_wrn/config_no_curr_cifar100.py")
 #tc = TrainClassifier("config/cifar100_wrn/config_multilam_cifar100.py")
-tc = TrainClassifier("config/cifar100_wrn/config_samemultilam_cifar_100.py")
+#tc = TrainClassifier("config/cifar100_wrn/config_samemultilam_cifar_100.py")
+#tc = TrainClassifier("config/cifar100_wrn/config_diffmultilam_cifar_100.py")
+#tc = TrainClassifier("config/cifar100_wrn/config_no_curr_res_cifar100.py")
 
 #tc = TrainClassifier("config/flowers/config_no_curr_flowers.py")
 #tc = TrainClassifier("config/flowers/config_multilam_flowers.py")
@@ -1159,11 +1189,21 @@ tc = TrainClassifier("config/cifar100_wrn/config_samemultilam_cifar_100.py")
 #tc = TrainClassifier("config/cifar10_wrn/config_samemultilam_cifar_10.py")
 #tc = TrainClassifier("config/cifar10_wrn/config_no_curr_multi_cifar_10.py")
 
-#tc = TrainClassifier("config/synthetic/config_learnlam_syn_gmm.py")
+tc = TrainClassifier("config/synthetic/config_learnlam_syn_gmm.py")
 #tc = TrainClassifier("config/synthetic/config_no_curr_syn_gmm.py")
 
 #tc = TrainClassifier("config/cars_wrn/config_no_curr_cars.py")
 #tc = TrainClassifier("config/cars_wrn/config_multilam_cars.py")
+
+#tc = TrainClassifier("config/dogs_wrn/config_no_curr_airplane.py")
+#tc = TrainClassifier("config/dogs_wrn/config_multilam_airplane.py")
+#tc = TrainClassifier("config/dogs_wrn/config_multilam_cub.py")
+#tc = TrainClassifier("config/dogs_wrn/config_multilam_dogs.py")
+
+#tc = TrainClassifier("config/dogs_wrn/config_no_curr_dogs.py")
+#tc = TrainClassifier("config/dogs_wrn/config_no_curr_airplane.py")
+#tc = TrainClassifier("config/dogs_wrn/config_no_curr_cub.py")
+
 tc.train()
 
 """            elif self.configdata['ds_strategy']['type'] in ['LearnLam']:
