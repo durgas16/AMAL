@@ -1192,4 +1192,5 @@ tc = TrainClassifier("config/synthetic/config_learnlam_syn_gmm.py")
 #tc = TrainClassifier("config/cars_wrn/config_no_curr_cars.py")
 #tc = TrainClassifier("config/cars_wrn/config_multilam_cars.py")
 
+tc = TrainClassifier('filename')
 tc.train()
