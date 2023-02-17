@@ -1,10 +1,11 @@
-# LearninNet110', setting
+# Learning setting
 config = dict(setting="supervisedlearning",
 
               dataset=dict(name="cifar100",
                            datadir="../data",
                            feature="dss",
-                           type="pre-defined"),
+                           type="pre-defined",
+                           grad_fit=3),
 
               dataloader=dict(shuffle=True,
                               trn_batch_size=128,
@@ -12,18 +13,17 @@ config = dict(setting="supervisedlearning",
                               tst_batch_size=1000,
                               pin_memory=True),
 
-              model=dict(architecture='WRN_16_X', 
+              model=dict(architecture='ResNet8', 
                          numclasses=100,
-                         teacher_arch=['WRN_16_X'], 
+                         teacher_arch=['ResNet110'], 
                          depth_teach = [16],
-                         width_teach = [8],
+                         width_teach = [3],
                          depth = 16,
                          width = 1,
-                         teacher_path=['results/No-curr_distil/cifar100/WRN_16_X_16_8_p0/16/model.pt']),
-              
-              ckpt=dict(is_load=False,
+                         teacher_path=['results/No-curr_distilN/cifar100/60.0/ResNet110_p0.0/4/10/24/model.pt']),
+
+              ckpt=dict(is_load=True,
                         is_save=True,
-                        is_save_pic=False,
                         dir='results/',
                         save_every=10),
 
@@ -38,19 +38,24 @@ config = dict(setting="supervisedlearning",
               scheduler=dict(type="Mstep",
                              T_max=200),
 
-              ds_strategy=dict(type="No-curr",
+              ds_strategy=dict(type="MultiLam", #'LearnLam',#
                                warm_epoch=10,
-                               decay=0.2,
-                               schedule=[0, 10, 20, 40, 60, 100, 140, 170, 201],
-                               sch_ind=1),
+                               select_every=10,
+                               ),
 
               train_args=dict(num_epochs=200,
                               device="cuda",
-                              print_every=5,
+                              print_every=2,
                               results_dir='results/',
                               print_args=["val_loss", "val_acc", "tst_loss", "tst_acc", "time", "trn_loss", "trn_acc"],
                               return_args=[]
                               )
               )
-
-
+'''model=dict(architecture='WRN_16_X', 
+                         numclasses=100,
+                         teacher_arch=['WRN_16_X'], 
+                         depth_teach = [16],
+                         width_teach = [3],
+                         depth = 16,
+                         width = 1,
+                         teacher_path=['results/No-curr_distil/cifar100/WRN_16_X_16_3_p0/16/model.pt']),'''

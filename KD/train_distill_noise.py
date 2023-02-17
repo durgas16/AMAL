@@ -19,13 +19,21 @@ from models import *
 
 from .LearnMultiLambdaMeta import LearnMultiLambdaMeta
 
+from noise.Superloss import SuperLoss
+from noise.Crust import estimate_grads
+from noise.fl_cifar import FacilityLocationCIFAR
+from noise.lazyGreedy import lazy_greedy_heap
+from sklearn.metrics import pairwise_distances
+
 import argparse
 
 parser = argparse.ArgumentParser(description='Adaptive Mixing of losses between 0 to 1')
 # General
 parser.add_argument('--lam', default=0.9, type=float,help='loss mixing parameter')  
 
-parser.add_argument('--temp', default=4, type=int,help='temperature for KD loss')                        
+parser.add_argument('--temp', default=4, type=int,help='temperature for KD loss')   
+
+parser.add_argument('--noise_per', default=0.4, type=int,help='noise percentage')                       
 
 parser.add_argument('--seed', type=int, default=-1, help='random seed, set as -1 for random.')
 
@@ -47,7 +55,10 @@ torch.backends.cudnn.benchmark = False
 Temp = args.temp 
 _lambda = args.lam
 
-print(seed,_lambda)
+rat_noise = args.noise_per
+
+print(seed,_lambda,rat_noise)
+
 
 class MyDataset(Dataset):
     def __init__(self,dataset):
@@ -90,7 +101,7 @@ class TrainClassifier:
 
         if mtype == 'NN_2L':
             print(mtype , hid_unit)
-        elif mtype in ['WRN_16_X']:
+        elif mtype in ['WRN_16_X','DenseNet_X']:
             print(mtype , d, w )
         elif mtype in ['CNN_X']:
             print(mtype , d )
@@ -98,28 +109,36 @@ class TrainClassifier:
             print(mtype)
 
         if mtype == 'ResNet8':
-            model = resnet8_cifar(num_classes=self.configdata['model']['numclasses'])
+            if self.configdata['dataset']['name'] in ['airplane','cars']:
+                model = resnet8_cifar(num_classes=self.configdata['model']['numclasses'],if_large=True)
+            else:
+                model = resnet8_cifar(num_classes=self.configdata['model']['numclasses'])
         elif mtype == 'ResNet14':
             model = resnet14_cifar(num_classes=self.configdata['model']['numclasses'])
+        elif mtype == 'ResNet20':
+            model = resnet20_cifar(num_classes=self.configdata['model']['numclasses'])
         elif mtype == 'ResNet56':
             model = resnet56_cifar(num_classes=self.configdata['model']['numclasses'])
         elif mtype == 'ResNet110':
             model = resnet110_cifar(num_classes=self.configdata['model']['numclasses'])
         elif mtype == 'ResNet32':
             model = resnet32_cifar(num_classes=self.configdata['model']['numclasses'])
+        elif mtype == 'DenseNet_X':
+            model = DN_X_Y(depth=d, g =w,num_classes=self.configdata['model']['numclasses'])
         elif mtype == 'WRN_16_X':
             if self.configdata['dataset']['name'] in ['cars','airplane']:
                 model = WRN_16_X(depth=d, width =w,num_classes=self.configdata['model']['numclasses'],if_large=True)
             else:
                 model = WRN_16_X(depth=d, width =w,num_classes=self.configdata['model']['numclasses'],if_large=False)
-        
         elif mtype == 'CNN_X':
             model = create_cnn_model(d, num_classes=self.configdata['model']['numclasses'])
+        
         elif mtype == 'NN_2L':
             model = TwoLayerNet(input_dim=self.configdata['model']['input_dims'], \
                                 num_classes=self.configdata['model']['numclasses'], \
                                 hidden_units=hid_unit)
 
+        
         model = model.to(self.configdata['train_args']['device'])
         return model
 
@@ -156,7 +175,7 @@ class TrainClassifier:
                 'T_max'])  # ,eta_min=8e-4
         elif self.configdata['scheduler']['type'] == 'step':
             scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[80,120],
-                                                             gamma=0.1)  # [60,120,160],
+                                                             gamma=0.1)
         elif self.configdata['scheduler']['type'] == 'Mstep':
             scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[150,180,210], gamma=0.1)                                                       
         elif self.configdata['scheduler']['type'] == 'RPlateau':
@@ -193,26 +212,24 @@ class TrainClassifier:
         """
         #General Training Loop with Data Selection Strategies
         """
-            
+
         if self.configdata['dataset']['name'] == "synthetic":
-            trainset, validset, testset, num_cls = load_dataset_custom(self.configdata['dataset']['datadir'],
+            trainset, validset, testset, num_cls,noise_idx  = load_dataset_custom(self.configdata['dataset']['datadir'],
                                                                         self.configdata['dataset']['name'],
-                                                                        self.configdata['dataset']['feature'],
+                                                                        'noise',
                                                                         seed=42,
                                                                         valid=True,
                                                                         type=self.configdata['dataset']['type'], \
                                                                         test_type=self.configdata['dataset'][
                                                                             'test_type'], \
                                                                         ncls=self.configdata['model'][
-                                                                            'numclasses'])  # noise_ratio=0.5) #24
+                                                                            'numclasses'],noise_ratio=rat_noise) 
         else:
-            trainset, validset, testset, num_cls = load_dataset_custom(self.configdata['dataset']['datadir'],
+            trainset, validset, testset, num_cls,noise_idx  = load_dataset_custom(self.configdata['dataset']['datadir'],
                                                                         self.configdata['dataset']['name'],
-                                                                        self.configdata['dataset']['feature'],
-                                                                        valid=True)
+                                                                        'noise',
+                                                                        valid=True,noise_ratio=rat_noise)
 
-        
-        # print(trainset.dataset.data.shape)
         N = len(trainset)
         trn_batch_size = self.configdata['dataloader']['trn_batch_size']
         val_batch_size = self.configdata['dataloader']['val_batch_size']
@@ -227,8 +244,7 @@ class TrainClassifier:
                                                   shuffle=True, pin_memory=True)
 
         valloader = torch.utils.data.DataLoader(validset, batch_size=val_batch_size,
-                                                shuffle=True, pin_memory=True)
-
+                                                    shuffle=True, pin_memory=True)
 
         testloader = torch.utils.data.DataLoader(testset, batch_size=tst_batch_size,
                                                  shuffle=False, pin_memory=True)
@@ -236,56 +252,56 @@ class TrainClassifier:
         trn_losses = list()
         val_losses = list()  
         tst_losses = list()
- 
+        
         trn_acc = list()
         val_acc = list()  
         tst_acc = list()  
-
+        
         
         # Results logging file
         print_every = self.configdata['train_args']['print_every']
         results_dir = osp.abspath(osp.expanduser(self.configdata['train_args']['results_dir']))
         if self.configdata['dataset']['name'] == "synthetic":
             if self.configdata['model']['architecture'] == 'NN_2L':
-                all_logs_dir = os.path.join(results_dir, self.configdata['ds_strategy']['type'] + "_distilT",
-                                            self.configdata['dataset']['name'],
+                all_logs_dir = os.path.join(results_dir, self.configdata['ds_strategy']['type'] + "_distilN",
+                                            self.configdata['dataset']['name'],str(rat_noise*100),
                                             self.configdata['model']['architecture'] + "_" + str(self.configdata['model']['hidden_units_stu'])\
                                             + "_p" + str(_lambda * 10), \
                                             self.configdata['dataset']['type'],
                                             self.configdata['dataset']['test_type'],
                                             str(seed))
             else:
-                all_logs_dir = os.path.join(results_dir, self.configdata['ds_strategy']['type'] + "_distilT",
-                                            self.configdata['dataset']['name'],
+                all_logs_dir = os.path.join(results_dir, self.configdata['ds_strategy']['type'] + "_distilN",
+                                            self.configdata['dataset']['name'],str(rat_noise*100),
                                             self.configdata['model']['architecture']+ "_p" + str(_lambda * 10), \
                                             self.configdata['dataset']['type'], self.configdata['dataset']['test_type'],
                                             str(seed))
         else:
-            if self.configdata['model']['architecture'] in ['WRN_16_X']:
+            if self.configdata['model']['architecture'] in ['WRN_16_X','DenseNet_X']:
                 if _lambda > 0:
-                    all_logs_dir = os.path.join(results_dir, self.configdata['ds_strategy']['type'] + "_distilT",\
-                    self.configdata['dataset']['name'],self.configdata['model']['architecture']+"_"+\
+                    all_logs_dir = os.path.join(results_dir, self.configdata['ds_strategy']['type'] + "_distilN",\
+                    self.configdata['dataset']['name'],str(rat_noise*100),self.configdata['model']['architecture']+"_"+\
                     str(self.configdata['model']['depth_teach'])+"_"+str(self.configdata['model']['width_teach']) +"_"+\
                     str(self.configdata['model']['depth'])+ "_"+str(self.configdata['model']['width'])+"_p" + \
                     str(_lambda * 10),str(Temp),str(self.configdata['ds_strategy']['select_every']),str(seed))
                 else:
-                    all_logs_dir = os.path.join(results_dir, self.configdata['ds_strategy']['type'] + "_distilT",\
-                    self.configdata['dataset']['name'],self.configdata['model']['architecture']+"_"+\
-                    str(self.configdata['model']['depth'])+ "_"+str(self.configdata['model']['width'])+"_p" + \
-                    str(_lambda * 10),str(Temp),str(self.configdata['ds_strategy']['select_every']),str(seed))
+                   all_logs_dir = os.path.join(results_dir, self.configdata['ds_strategy']['type'] + "_distilN",\
+                       self.configdata['dataset']['name'],str(rat_noise*100),self.configdata['model']['architecture']+"_"+\
+                        str(self.configdata['model']['depth'])+ "_"+str(self.configdata['model']['width'])+"_p" + \
+                        str(_lambda * 10),str(Temp),str(self.configdata['ds_strategy']['select_every']),str(seed))
             elif self.configdata['model']['architecture'] in ['CNN_X']:
                 if _lambda > 0:
-                    all_logs_dir = os.path.join(results_dir, self.configdata['ds_strategy']['type'] + "_distilT",\
-                    self.configdata['dataset']['name'],self.configdata['model']['architecture']+"_"+\
+                    all_logs_dir = os.path.join(results_dir, self.configdata['ds_strategy']['type'] + "_distilN",\
+                    self.configdata['dataset']['name'],str(rat_noise*100),self.configdata['model']['architecture']+"_"+\
                     str(self.configdata['model']['depth_teach'])+"_"+str(self.configdata['model']['depth'])+ \
                     "_p" + str(_lambda * 10),str(seed))
                 else:
-                    all_logs_dir = os.path.join(results_dir, self.configdata['ds_strategy']['type'] + "_distilT",\
-                    self.configdata['dataset']['name'],self.configdata['model']['architecture']+"_"+\
+                    all_logs_dir = os.path.join(results_dir, self.configdata['ds_strategy']['type'] + "_distilN",\
+                    self.configdata['dataset']['name'],str(rat_noise*100),self.configdata['model']['architecture']+"_"+\
                     str(self.configdata['model']['depth'])+"_p" + str(_lambda * 10),str(seed))
             else:
-                all_logs_dir = os.path.join(results_dir, self.configdata['ds_strategy']['type'] + "_distilT",
-                                            self.configdata['dataset']['name'],
+                all_logs_dir = os.path.join(results_dir, self.configdata['ds_strategy']['type'] + "_distilN",
+                                            self.configdata['dataset']['name'],str(rat_noise*100),
                                             self.configdata['model']['architecture'] + "_p" + str(_lambda * 10),\
                                             str(Temp),str(self.configdata['ds_strategy']['select_every']),str(seed))
         os.makedirs(all_logs_dir, exist_ok=True)
@@ -295,43 +311,44 @@ class TrainClassifier:
         checkpoint_dir = osp.abspath(osp.expanduser(self.configdata['ckpt']['dir']))
         if self.configdata['dataset']['name'] == "synthetic":
             if self.configdata['model']['architecture'] == 'NN_2L':
-                ckpt_dir = os.path.join(checkpoint_dir, self.configdata['ds_strategy']['type'] + "_distilT",\
-                self.configdata['dataset']['name'],self.configdata['model']['architecture'] + "_" + \
+                ckpt_dir = os.path.join(checkpoint_dir, self.configdata['ds_strategy']['type'] + "_distilN",\
+                self.configdata['dataset']['name'],str(rat_noise*100),self.configdata['model']['architecture'] + "_" + \
                 str(self.configdata['model']['hidden_units_stu'])+ "_p" + str(_lambda * 10), \
                 self.configdata['dataset']['type'],self.configdata['dataset']['test_type'],str(seed))
             else:
-                ckpt_dir = os.path.join(checkpoint_dir, self.configdata['ds_strategy']['type'] + "_distilT",
-                                            self.configdata['dataset']['name'],
+                ckpt_dir = os.path.join(checkpoint_dir, self.configdata['ds_strategy']['type'] + "_distilN",
+                                            self.configdata['dataset']['name'],str(rat_noise*100),
                                             self.configdata['model']['architecture']+ "_p" + str(_lambda * 10), \
                                             self.configdata['dataset']['type'], self.configdata['dataset']['test_type'],
                                             str(seed))
         else:
-            if self.configdata['model']['architecture'] in ['WRN_16_X']:
+            if self.configdata['model']['architecture'] in ['WRN_16_X','DenseNet_X']:
                 if _lambda > 0:
-                    ckpt_dir = os.path.join(checkpoint_dir, self.configdata['ds_strategy']['type'] + "_distilT",\
-                    self.configdata['dataset']['name'],self.configdata['model']['architecture']+"_"+\
+                    ckpt_dir = os.path.join(checkpoint_dir, self.configdata['ds_strategy']['type'] + "_distilN",\
+                    self.configdata['dataset']['name'],str(rat_noise*100),self.configdata['model']['architecture']+"_"+\
                     str(self.configdata['model']['depth_teach'])+"_"+str(self.configdata['model']['width_teach']) +"_"+\
                     str(self.configdata['model']['depth'])+ "_"+str(self.configdata['model']['width'])+"_p" + \
-                    str(_lambda * 10),str(seed))
+                    str(_lambda * 10),str(Temp),str(self.configdata['ds_strategy']['select_every']),str(seed))
                 else:
-                    ckpt_dir = os.path.join(checkpoint_dir, self.configdata['ds_strategy']['type'] + "_distilT",\
-                    self.configdata['dataset']['name'],self.configdata['model']['architecture']+"_"+\
+                    ckpt_dir = os.path.join(checkpoint_dir, self.configdata['ds_strategy']['type'] + "_distilN",\
+                    self.configdata['dataset']['name'],str(rat_noise*100),self.configdata['model']['architecture']+"_"+\
                     str(self.configdata['model']['depth'])+ "_"+str(self.configdata['model']['width'])+"_p" + \
-                    str(_lambda * 10),str(seed))
+                    str(_lambda * 10),str(Temp),str(self.configdata['ds_strategy']['select_every']),str(seed))
 
             elif self.configdata['model']['architecture'] in ['CNN_X']:
                 if _lambda > 0:
-                    ckpt_dir = os.path.join(checkpoint_dir, self.configdata['ds_strategy']['type'] + "_distilT",\
-                    self.configdata['dataset']['name'],self.configdata['model']['architecture']+"_"+\
+                    ckpt_dir = os.path.join(checkpoint_dir, self.configdata['ds_strategy']['type'] + "_distilN",\
+                    self.configdata['dataset']['name'],str(rat_noise*100),self.configdata['model']['architecture']+"_"+\
                     str(self.configdata['model']['depth_teach'])+"_"+str(self.configdata['model']['depth'])+ \
-                    "_p" + str(_lambda * 10),str(seed))
+                    "_p" + str(_lambda * 10),str(Temp),str(self.configdata['ds_strategy']['select_every']),str(seed))
                 else:
-                    ckpt_dir = os.path.join(checkpoint_dir, self.configdata['ds_strategy']['type'] + "_distilT",\
-                    self.configdata['dataset']['name'],self.configdata['model']['architecture']+"_"+\
-                    str(self.configdata['model']['depth'])+"_p" + str(_lambda * 10),str(seed))
+                    ckpt_dir = os.path.join(checkpoint_dir, self.configdata['ds_strategy']['type'] + "_distilN",\
+                    self.configdata['dataset']['name'],str(rat_noise*100),self.configdata['model']['architecture']+"_"+\
+                    str(self.configdata['model']['depth'])+"_p" + str(_lambda * 10),\
+                    str(Temp),str(self.configdata['ds_strategy']['select_every']),str(seed))
             else:
-                ckpt_dir = os.path.join(checkpoint_dir, self.configdata['ds_strategy']['type'] + "_distilT",
-                                        self.configdata['dataset']['name'],
+                ckpt_dir = os.path.join(checkpoint_dir, self.configdata['ds_strategy']['type'] + "_distilN",
+                                        self.configdata['dataset']['name'],str(rat_noise*100),
                                         self.configdata['model']['architecture'] + "_p" + str(_lambda * 10),\
                                         str(Temp),str(self.configdata['ds_strategy']['select_every']),str(seed))
 
@@ -348,13 +365,13 @@ class TrainClassifier:
         w=None
         if mtype == 'NN_2L':
             hid_unit = self.configdata['model']['hidden_units_stu']
-        elif mtype in ['WRN_16_X']:
+        elif mtype in ['WRN_16_X','DenseNet_X']:
             d = self.configdata['model']['depth']
             w = self.configdata['model']['width']
         elif mtype in ['CNN_X']:
             d = self.configdata['model']['depth']
         train_model = self.create_model(mtype,hid_unit,d,w)
-       
+    
         Nteacher = 1
         if _lambda > 0:
             mtype = self.configdata['model']['teacher_arch']
@@ -363,7 +380,7 @@ class TrainClassifier:
             w=None
             if 'NN_2L' in mtype:
                 hid_unit = self.configdata['model']['hidden_units_teach']
-            elif 'WRN_16_X' in mtype:
+            elif 'WRN_16_X' in mtype or 'DenseNet_X' in mtype:
                 d = self.configdata['model']['depth_teach']
                 w = self.configdata['model']['width_teach']
             elif 'CNN_X' in mtype:
@@ -376,7 +393,7 @@ class TrainClassifier:
 
                 if mtype[m] == 'NN_2L':
                    teacher_model.append(self.create_model(mtype[m],hid_unit=hid_unit[m]))
-                elif mtype[m] in ['WRN_16_X']:
+                elif mtype[m] in ['WRN_16_X','DenseNet_X']:
                     teacher_model.append(self.create_model(mtype[m],d=d[m],w=w[m]))
                 elif mtype[m] in ['CNN_X']:
                     teacher_model.append(self.create_model(mtype[m],d=d[m]))
@@ -392,25 +409,11 @@ class TrainClassifier:
         # Loss Functions
         criterion, criterion_nored = self.loss_function()
 
+        if self.configdata['ds_strategy']['type'] in ['SuperLoss']:
+            scriterion = SuperLoss(C=self.configdata['model']['numclasses'], lam=0.25).cuda()
+
         # Getting the optimizer and scheduler
         optimizer, scheduler = self.optimizer_with_scheduler(train_model)
-        
-        teacher_model[-1].eval()
-        tst_correct =0
-        tst_total = 0
-        with torch.no_grad():
-            for batch_idx, (inputs, targets) in enumerate(testloader):
-                # print(batch_idx)
-                inputs, targets = inputs.to(self.configdata['train_args']['device']), targets.to(
-                    self.configdata['train_args']['device'], non_blocking=True)
-                outputs = teacher_model[-1](inputs)
-                loss = criterion(outputs, targets)
-                tst_total += targets.size(0)
-                
-                _, predicted = outputs.max(1)
-                tst_correct += predicted.eq(targets).sum().item()
-
-        print("Teacher's test accuracy",100*tst_correct/tst_total)
         
         if _lambda > 0:
             lambdas = torch.full((N,Nteacher+1),_lambda, device=self.configdata['train_args']['device'])
@@ -455,63 +458,133 @@ class TrainClassifier:
         else:
             start_epoch = 0
 
-        
         if self.configdata['ds_strategy']['type'] in ['MultiLam']:
             lelam = LearnMultiLambdaMeta(trainloader_ind, valloader, copy.deepcopy(train_model), num_cls, N, \
             criterion_nored, self.configdata['train_args']['device'], self.configdata['dataset']['grad_fit'], \
             teacher_model, criterion, Temp)
             
+            select = self.configdata['ds_strategy']['select_every']
+
         print_args = self.configdata['train_args']['print_args']
-        for i in range(start_epoch, self.configdata['train_args']['num_epochs']):
 
-            if (self.configdata['ds_strategy']['type'] in ['MultiLam'] and i % select == 0 and i>=select ):
-
-                cached_state_dictT = copy.deepcopy(train_model.state_dict())
-                clone_dict = copy.deepcopy(train_model.state_dict())
-                lelam.update_model(clone_dict)
-                train_model.load_state_dict(cached_state_dictT)
-
-                lambdas = lelam.get_lambdas(optimizer.param_groups[0]['lr'],i,lambdas)
-                
-                for m in range(Nteacher+1):
-                    print(lambdas[:,m].max(), lambdas[:,m].min(), torch.median(lambdas[:,m]),\
-                            torch.quantile(lambdas[:,m], 0.75),torch.quantile(lambdas[:,m], 0.25))
-                
-            train_model.train()
+        if self.configdata['ds_strategy']['type'] in ['CRUST']:
             for batch_idx, (inputs, targets,indices) in enumerate(trainloader_ind):
                 inputs, targets = inputs.to(self.configdata['train_args']['device']), targets.to(
                     self.configdata['train_args']['device'],
                     non_blocking=True)  # targets can have non_blocking=True.
-                optimizer.zero_grad()
-                outputs = train_model(inputs)
 
-                if _lambda > 0:                            
-                    
-                    loss_SL = criterion_nored(outputs, targets)
-                    loss = lambdas[indices,0]*loss_SL
-                    
-                    for m in range(Nteacher):
-                        if self.configdata['ds_strategy']['type'] in ['DGKD']:
-                            prob = np.random.random(1)[0]
-                            if prob >= 0.75:
-                                continue
-                        with torch.no_grad():
-                            teacher_outputs = teacher_model[m](inputs)
-                        loss_KD = nn.KLDivLoss(reduction='none')(
-                            F.log_softmax(outputs / Temp, dim=1), F.softmax(teacher_outputs / Temp, dim=1))
-                        loss +=  Temp * Temp *lambdas[indices,m+1]*torch.sum(loss_KD, dim=1)
-                        
-                    loss = torch.mean(loss)
-                else:
-                    loss = criterion(outputs, targets)
-                
-                loss.backward()
-                optimizer.step()
-                del inputs, targets
+                for m in range(Nteacher):
+                    with torch.no_grad():
+                        if batch_idx ==0:
+                            all_teacher_outputs = teacher_model[m](inputs)
+                        else:
+                            all_teacher_outputs = torch.cat((all_teacher_outputs,teacher_model[m](inputs)),dim=0)
         
-            #print("Training with lr", round(optimizer.param_groups[0]['lr'], 5))
-            if self.configdata['scheduler']['type'] == 'RPlateau':    
-                scheduler.step(val_losses[-1])
+        for i in range(start_epoch, self.configdata['train_args']['num_epochs']):
+
+            #print(i)
+            train_model.train()
+
+            if self.configdata['ds_strategy']['type'] in ['CRUST'] and i >= 5 and  _lambda > 0:
+                
+                optimizer.zero_grad()
+                train_model.zero_grad()
+
+                
+                grads_all, labels = estimate_grads(trainloader_ind, copy.deepcopy(train_model), criterion_nored,\
+                all_teacher_outputs,self.configdata['train_args']['device'],lambdas)
+                # per-class clustering
+                ssets = []
+                weights = []
+                for c in range(self.configdata['model']['numclasses']):
+                    sample_ids = np.where((labels == c) == True)[0]
+                    grads = grads_all[sample_ids]
+                    
+                    dists = pairwise_distances(grads)
+                    weight = np.sum(dists < 2.0, axis=1)
+                    V = range(len(grads))
+                    Fac = FacilityLocationCIFAR(V, D=dists)
+                    B = int(self.configdata['ds_strategy']['fl_ratio'] * len(grads))
+                    sset, vals = lazy_greedy_heap(Fac, V, B)
+                    weights.extend(weight[sset].tolist())
+                    #print(len(sset),end=",")
+                    sset = sample_ids[np.array(sset)]
+                    ssets += list(sset)
+                weights = torch.FloatTensor(weights)
+                #print("\n",weights.max(), weights.min(), torch.median(weights),torch.quantile(weights, 0.75),\
+                #    torch.quantile(weights, 0.25))
+                weights = (weights).to(self.configdata['train_args']['device'])
+                data_sub = MyDataset(Subset(trainset, ssets))
+                teacher_out_sub = all_teacher_outputs[ssets]
+                subset_trnloader = torch.utils.data.DataLoader(data_sub, batch_size=trn_batch_size,
+                                                                       shuffle=True,
+                                                                       pin_memory=True)
+
+                for batch_idx, (inputs, targets,indices) in enumerate(subset_trnloader):
+                    inputs, targets = inputs.to(self.configdata['train_args']['device']), targets.to(
+                        self.configdata['train_args']['device'],
+                        non_blocking=True)  # targets can have non_blocking=True.
+                    optimizer.zero_grad()
+                    outputs = train_model(inputs)
+                    c_weights = weights[indices]/ (weights[indices].sum())
+                    loss = (c_weights*(lambdas[indices,0]*criterion_nored(outputs, targets)+ \
+                        Temp * Temp *lambdas[indices,1]*torch.sum(nn.KLDivLoss(reduction='none')(
+                                F.log_softmax(outputs / Temp, dim=1), \
+                                    F.softmax(teacher_out_sub[indices] / Temp, dim=1)),dim=1))).sum()
+                    
+                    loss.backward()
+                    optimizer.step()
+                #print(batch_idx,batch_idx*trn_batch_size)
+            else:
+
+                if (self.configdata['ds_strategy']['type'] in ['MultiLam'] and i % select == 0 and i>=select ):
+
+                    cached_state_dictT = copy.deepcopy(train_model.state_dict())
+                    clone_dict = copy.deepcopy(train_model.state_dict())
+                    lelam.update_model(clone_dict)
+                    train_model.load_state_dict(cached_state_dictT)
+
+                    lambdas = lelam.get_lambdas(optimizer.param_groups[0]['lr'],i,lambdas)
+                    
+                    for m in range(Nteacher+1):
+                        print(lambdas[:,m].max(), lambdas[:,m].min(), torch.median(lambdas[:,m]),\
+                                torch.quantile(lambdas[:,m], 0.75),torch.quantile(lambdas[:,m], 0.25))
+                    
+                train_model.train()
+                for batch_idx, (inputs, targets,indices) in enumerate(trainloader_ind):
+                    inputs, targets = inputs.to(self.configdata['train_args']['device']), targets.to(
+                        self.configdata['train_args']['device'],
+                        non_blocking=True)  # targets can have non_blocking=True.
+                    optimizer.zero_grad()
+                    outputs = train_model(inputs)
+
+                    if _lambda > 0:                            
+                        
+                        loss_SL = criterion_nored(outputs, targets)
+                        loss = lambdas[indices,0]*loss_SL
+                        
+                        for m in range(Nteacher):
+                            with torch.no_grad():
+                                teacher_outputs = teacher_model[m](inputs)
+                            loss_KD = nn.KLDivLoss(reduction='none')(
+                                F.log_softmax(outputs / Temp, dim=1), F.softmax(teacher_outputs / Temp, dim=1))
+                            loss +=  Temp * Temp *lambdas[indices,m+1]*torch.sum(loss_KD, dim=1)
+                            
+                        loss = torch.mean(loss)
+                        if self.configdata['ds_strategy']['type'] in ['SuperLoss']:
+                            loss = scriterion(outputs,teacher_outputs, targets,lambdas[indices])
+                    else:
+                        loss = criterion(outputs, targets)
+                    
+                    loss.backward()
+                    optimizer.step()
+                    del inputs, targets
+            
+            if self.configdata['scheduler']['type'] == 'RPlateau':
+                if len(val_losses) > 0:
+                    scheduler.step(val_losses[-1])
+                elif len(trn_losses) > 0:
+                    scheduler.step(trn_losses[-1])
             else:
                 scheduler.step()
 
@@ -534,7 +607,7 @@ class TrainClassifier:
                         self.configdata['train_args']['device'], non_blocking=True)
                     outputs = train_model(inputs)
                     curr_outputs[indices] = outputs.cpu()
-
+                    
                     loss = criterion(outputs, targets)
                     trn_loss += loss.item()
                     
@@ -545,7 +618,7 @@ class TrainClassifier:
                 trn_acc.append(trn_correct / trn_total)
             
             all_outputs.append(curr_outputs)
-
+            
             if "val_loss" in print_args:
                 with torch.no_grad():
                     for batch_idx, (inputs, targets) in enumerate(valloader):
@@ -591,7 +664,7 @@ class TrainClassifier:
 
                     tst_losses.append(tst_loss/ tst_total)
                     tst_acc.append(tst_correct / tst_total)
-                    
+
 
             if self.configdata['ds_strategy']['type'] in ['MultiLam'] and (i % select == 0 or i in self.configdata['ds_strategy']['schedule']):
                 if (i < self.configdata['ds_strategy']['warm_epoch']):
@@ -622,7 +695,6 @@ class TrainClassifier:
 
                     if arg == "trn_acc":
                         print_str += " , " + "Training Accuracy: " + str(trn_acc[-1])
-
 
                 print(print_str)
 
@@ -663,7 +735,7 @@ class TrainClassifier:
                     # save checkpoint
                     self.save_ckpt(ckpt_state, checkpoint_path)
                     print("Model checkpoint saved at epoch " + str(i + 1))
-
+                    
         print(self.configdata['ds_strategy']['type'] + " Selection Run---------------------------------")
         if "val_loss" in print_args:
             if "val_acc" in print_args:
@@ -702,7 +774,6 @@ class TrainClassifier:
                 tst_str = tst_str + " , " + str(tst)
             print(tst_str, file=logfile)
 
-        
         logfile.close()
 
 

@@ -3,15 +3,16 @@ config = dict(setting="supervisedlearning",
               dataset=dict(name="cars",
                            datadir="../data",
                            feature="dss",
-                           type="pre-defined"),
+                           type="pre-defined",
+                           grad_fit=2),
 
               dataloader=dict(shuffle=True,
                               trn_batch_size=64,
                               val_batch_size=64,
                               tst_batch_size=128,
                               pin_memory=True),
-                              
-              model=dict(architecture='WRN_16_X',
+
+             model=dict(architecture='WRN_16_X',
                          numclasses=196,
                          teacher_arch=['WRN_16_X'], 
                          depth_teach = [16],
@@ -19,7 +20,7 @@ config = dict(setting="supervisedlearning",
                          depth = 16,
                          width = 1,
                          teacher_path=['results/No-curr_distil/cars/WRN_16_X_16_8_p0/16/model.pt']),
-              
+
               ckpt=dict(is_load=False,
                         is_save=True,
                         dir='results/',
@@ -36,11 +37,10 @@ config = dict(setting="supervisedlearning",
               scheduler=dict(type="Mstep",
                              T_max=200),
 
-              ds_strategy=dict(type="No-curr",
+              ds_strategy=dict(type="MultiLam",
                                warm_epoch=10,
-                               decay=0.2,
-                               schedule=[0, 10, 20, 40, 60, 100, 140, 170, 201],
-                               sch_ind=1),
+                               select_every=10,
+                               ),
 
               train_args=dict(num_epochs=200,
                               device="cuda",
@@ -50,5 +50,3 @@ config = dict(setting="supervisedlearning",
                               return_args=[]
                               )
               )
-
-

@@ -1,27 +1,26 @@
 # Learning setting
 config = dict(setting="supervisedlearning",
 
-              dataset=dict(name="dogs",
+              dataset=dict(name="cifar100",
                            datadir="../data",
                            feature="dss",
                            type="pre-defined",
-                           grad_fit=2),
+                           grad_fit=4),
 
               dataloader=dict(shuffle=True,
-                              trn_batch_size=64,
-                              val_batch_size=128,
-                              tst_batch_size=128,
+                              trn_batch_size=128,
+                              val_batch_size=1000,
+                              tst_batch_size=1000,
                               pin_memory=True),
 
-             model=dict(architecture='WRN_16_X', 
-                         numclasses=120,
-                         teacher_arch=['WRN_16_X','WRN_16_X'], 
-                         depth_teach = [16,16],
-                         width_teach = [3,4],
-                         depth = 16,
-                         width = 1,
-                         teacher_path=['results/No-curr_distil/dogs/WRN_16_X_16_3_p0/16/model.pt',\
-                         'results/No-curr_distil/dogs/WRN_16_X_16_4_p0/16/model.pt']),
+             model=dict(architecture='ResNet8', #'DenseNet_X',#
+                         numclasses=100,
+                         teacher_arch=['ResNet14','ResNet26','ResNet32','ResNet56'], 
+                         
+                         teacher_path=['results/No-curr_distil/cifar100/ResNet14_p0/24/model.pt',\
+                         'results/No-curr_distil/cifar100/ResNet26_p0/24/model.pt',\
+                         'results/No-curr_distil/cifar100/ResNet32_p0/24/model.pt',\
+                         'results/No-curr_distil/cifar100/ResNet56_p0/24/model.pt']),
 
               ckpt=dict(is_load=True,
                         is_save=True,
@@ -36,15 +35,13 @@ config = dict(setting="supervisedlearning",
                              lr=0.1,
                              weight_decay=5e-4),
 
-              scheduler=dict(type="Mstep",
-                             T_max=200),
+              scheduler=dict(type="cosine_annealing",#"Mstep",
+                             T_max=201),
 
-              ds_strategy=dict(type="MultiLam",#"No-curr",
+              ds_strategy=dict(type="MultiLam",#"No-curr"
                                warm_epoch=10,
                                select_every=10,
-                               decay=0.2,
-                               schedule=[0, 10, 20, 40, 60, 100, 140, 170, 201],
-                               sch_ind=1),
+                               ),
 
               train_args=dict(num_epochs=200,
                               device="cuda",
