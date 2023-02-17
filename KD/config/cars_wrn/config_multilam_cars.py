@@ -1,4 +1,3 @@
-# Learning setting
 config = dict(setting="supervisedlearning",
 
               dataset=dict(name="cars",
@@ -13,7 +12,7 @@ config = dict(setting="supervisedlearning",
                               tst_batch_size=128,
                               pin_memory=True),
 
-             model=dict(architecture='WRN_16_X', 
+             model=dict(architecture='WRN_16_X',
                          numclasses=196,
                          teacher_arch=['WRN_16_X'], 
                          depth_teach = [16],
@@ -22,7 +21,7 @@ config = dict(setting="supervisedlearning",
                          width = 1,
                          teacher_path=['results/No-curr_distil/cars/WRN_16_X_16_8_p0/16/model.pt']),
 
-              ckpt=dict(is_load=True,
+              ckpt=dict(is_load=False,
                         is_save=True,
                         dir='results/',
                         save_every=10),
@@ -42,12 +41,11 @@ config = dict(setting="supervisedlearning",
                                warm_epoch=10,
                                select_every=10,
                                decay=0.2,
-                               schedule=[0, 10, 20, 40, 60, 100, 140, 170, 201],
-                               sch_ind=1),
+                               ),
 
               train_args=dict(num_epochs=200,
                               device="cuda",
-                              print_every=2,
+                              print_every=5,
                               results_dir='results/',
                               print_args=["val_loss", "val_acc", "tst_loss", "tst_acc", "time", "trn_loss", "trn_acc"],
                               return_args=[]

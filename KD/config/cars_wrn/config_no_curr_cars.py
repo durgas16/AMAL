@@ -1,4 +1,3 @@
-# LearninNet110', setting
 config = dict(setting="supervisedlearning",
 
               dataset=dict(name="cars",
@@ -8,11 +7,11 @@ config = dict(setting="supervisedlearning",
 
               dataloader=dict(shuffle=True,
                               trn_batch_size=64,
-                              val_batch_size=128,
+                              val_batch_size=64,
                               tst_batch_size=128,
                               pin_memory=True),
-
-              model=dict(architecture='WRN_16_X', 
+                              
+              model=dict(architecture='WRN_16_X',
                          numclasses=196,
                          teacher_arch=['WRN_16_X'], 
                          depth_teach = [16],
@@ -23,7 +22,6 @@ config = dict(setting="supervisedlearning",
               
               ckpt=dict(is_load=False,
                         is_save=True,
-                        is_save_pic=False,
                         dir='results/',
                         save_every=10),
 
