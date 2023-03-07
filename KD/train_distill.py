@@ -17,7 +17,7 @@ from utils.scheduler import Scheduler
 
 from models import *
 
-from .LearnMultiLambdaMeta import LearnMultiLambdaMeta
+from LearnMultiLambdaMeta import LearnMultiLambdaMeta
 
 import argparse
 
@@ -27,9 +27,9 @@ parser.add_argument('--lam', default=0.9, type=float,help='loss mixing parameter
 
 parser.add_argument('--temp', default=4, type=int,help='temperature for KD loss')                        
 
-parser.add_argument('--seed', type=int, default=-1, help='random seed, set as -1 for random.')
+parser.add_argument('--seed', type=int, default=24, help='random seed, set as -1 for random.')
 
-parser.add_argument('--con_file', type=str, default="config/cifar100_wrn/config_multilam_cifar100.py",\
+parser.add_argument('--con_file', type=str, default="config/cifar100/config_amal_cifar100.py",\
      help='path to the config file')
 
 
@@ -47,7 +47,7 @@ torch.backends.cudnn.benchmark = False
 Temp = args.temp 
 _lambda = args.lam
 
-print(seed,_lambda)
+#print(seed,_lambda)
 
 class MyDataset(Dataset):
     def __init__(self,dataset):
@@ -389,7 +389,7 @@ class TrainClassifier:
                 else:
                     teacher_model.append(self.create_model(mtype[m]))
                 
-                print("Teacher",sum(p.numel() for p in teacher_model[-1].parameters() if p.requires_grad))
+                #print("Teacher",sum(p.numel() for p in teacher_model[-1].parameters() if p.requires_grad))
                 print("Loading from",self.configdata['model']['teacher_path'][m])
                 checkpoint = torch.load(self.configdata['model']['teacher_path'][m])
                 teacher_model[m].load_state_dict(checkpoint['state_dict'])
@@ -406,9 +406,9 @@ class TrainClassifier:
             
             lambdas[:,0] = 1 - torch.max(lambdas[:,1:],dim=1).values
                 
-            for m in range(Nteacher+1):
+            '''for m in range(Nteacher+1):
                 print(lambdas[:,m].max(), lambdas[:,m].min(), torch.median(lambdas[:,m]),\
-                        torch.quantile(lambdas[:,m], 0.75),torch.quantile(lambdas[:,m], 0.25))
+                        torch.quantile(lambdas[:,m], 0.75),torch.quantile(lambdas[:,m], 0.25))'''
         all_outputs =[]
         print("=======================================", file=logfile)
 
@@ -463,9 +463,9 @@ class TrainClassifier:
 
                 lambdas = lelam.get_lambdas(optimizer.param_groups[0]['lr'],i,lambdas)
                 
-                for m in range(Nteacher+1):
+                '''for m in range(Nteacher+1):
                     print(lambdas[:,m].max(), lambdas[:,m].min(), torch.median(lambdas[:,m]),\
-                            torch.quantile(lambdas[:,m], 0.75),torch.quantile(lambdas[:,m], 0.25))
+                            torch.quantile(lambdas[:,m], 0.75),torch.quantile(lambdas[:,m], 0.25))'''
                 
             train_model.train()
             for batch_idx, (inputs, targets,indices) in enumerate(trainloader_ind):
@@ -567,23 +567,11 @@ class TrainClassifier:
                             _, predicted = outputs.max(1)
                             tst_correct += predicted.eq(targets).sum().item()
 
-                        if i + 1 == self.configdata['train_args']['num_epochs'] or \
-                                ((i + 1) % self.configdata['train_args']['print_every'] == 0):
-
-                            if batch_idx == 0:
-                                full_predict = predicted
-                                full_logit = outputs
-                                full_targets = targets
-                            else:
-                                full_predict = torch.cat((full_predict, predicted), dim=0)
-                                full_logit = torch.cat((full_logit, outputs), dim=0)
-                                full_targets = torch.cat((full_targets, targets), dim=0)
-
                     tst_losses.append(tst_loss/ tst_total)
                     tst_acc.append(tst_correct / tst_total)
                     
 
-            if self.configdata['ds_strategy']['type'] in ['MultiLam'] and (i % select == 0 or i in self.configdata['ds_strategy']['schedule']):
+            if self.configdata['ds_strategy']['type'] in ['MultiLam'] :
                 if (i < self.configdata['ds_strategy']['warm_epoch']):
                     all_lambda = []
                 

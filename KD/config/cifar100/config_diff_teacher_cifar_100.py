@@ -1,10 +1,11 @@
-# LearninNet110', setting
+# Learning setting
 config = dict(setting="supervisedlearning",
 
               dataset=dict(name="cifar100",
                            datadir="../data",
                            feature="dss",
-                           type="pre-defined"),
+                           type="pre-defined",
+                           grad_fit=4),
 
               dataloader=dict(shuffle=True,
                               trn_batch_size=128,
@@ -12,18 +13,17 @@ config = dict(setting="supervisedlearning",
                               tst_batch_size=1000,
                               pin_memory=True),
 
-              model=dict(architecture='ResNet8', 
+             model=dict(architecture='ResNet8', #'DenseNet_X',#
                          numclasses=100,
-                         teacher_arch=['ResNet56'], 
-                         depth_teach = [16],
-                         width_teach = [8],
-                         depth = 16,
-                         width = 1,
-                         teacher_path=['results/No-curr_distilN/cifar100/60.0/ResNet56_p0.0/4/10/24/model.pt']),
-              
+                         teacher_arch=['ResNet14','ResNet26','ResNet32','ResNet56'], 
+                         
+                         teacher_path=['results/No-curr_distil/cifar100/ResNet14_p0/24/model.pt',\
+                         'results/No-curr_distil/cifar100/ResNet26_p0/24/model.pt',\
+                         'results/No-curr_distil/cifar100/ResNet32_p0/24/model.pt',\
+                         'results/No-curr_distil/cifar100/ResNet56_p0/24/model.pt']),
+
               ckpt=dict(is_load=False,
                         is_save=True,
-                        is_save_pic=False,
                         dir='results/',
                         save_every=10),
 
@@ -35,20 +35,19 @@ config = dict(setting="supervisedlearning",
                              lr=0.1,
                              weight_decay=5e-4),
 
-              scheduler=dict(type="Mstep",
-                             T_max=200),
+              scheduler=dict(type="cosine_annealing",#"Mstep",
+                             T_max=201),
 
-              ds_strategy=dict(type="No-curr",
+              ds_strategy=dict(type="MultiLam",#"No-curr"
                                warm_epoch=10,
+                               select_every=10
                                ),
 
               train_args=dict(num_epochs=200,
                               device="cuda",
-                              print_every=5,
+                              print_every=2,
                               results_dir='results/',
                               print_args=["val_loss", "val_acc", "tst_loss", "tst_acc", "time", "trn_loss", "trn_acc"],
                               return_args=[]
                               )
               )
-
-

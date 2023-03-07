@@ -1,0 +1,8 @@
+data
+results
+KD/__pycache__
+KD/utils/__pycache__
+KD/models/__pycache__
+KD/config/cifar100/__pycache__
+KD/config/airplane/__pycache__
+KD/noise/__pycache__
